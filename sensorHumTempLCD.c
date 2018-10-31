@@ -11,6 +11,8 @@
  * SCL(3)    -->    GPIO3 (NumPin: 5)
  * SDA(4)    -->	GPIO2 (NumPin: 3)
  *
+ * BAUDIOS   -->    115200
+ *
  * Compilar: gcc -Wall -o <nombre> <nombre>.c -lwiringPi
  * Ejecutar: sudo ./<nombre>
  *
@@ -38,6 +40,8 @@
 #include <pthread.h>
 
 #include <geniePi.h>  //the ViSi-Genie-RaspPi library
+
+#define BAUDURATE 115200 // Must be the same as the program
 
 #define HUMMIN 40.0
 #define HUMMAX 70.0
@@ -74,31 +78,38 @@ static void *handleHumidityTemperature(void *data)
     //write to METER
     genieWriteObj(GENIE_OBJ_METER, 0x00, (int)humidity);	
     genieWriteObj(GENIE_OBJ_ANGULAR_METER, 0x00, (int)temperature);	
+    if((int)temperature = tempMedia){
+    	 genieWriteObj(GENIE_OBJ_USER_LED, 0x00, (int)tempMedia);	
+    }
   return NULL;
 }
 
-//This a thread for writing to the USER_LED
-static void *handleThreshold(void *data)
-{
-
-  //write to USER_LED
-  genieWriteObj(GENIE_OBJ_USER_LED, 0x00, (int)tempMedia);	
-  return NULL;
-}
 
 //This a thread for writing to the LED_DIGITS
 static void *handleHour(void *data)
 {
 
   //write to LED_DIGITS
+	string hourMinutes;
+	t = time(NULL);	
 
-  genieWriteObj(GENIE_OBJ_LED_DIGITS, 0x01, hourMinutes);	
-  genieWriteObj(GENIE_OBJ_LED_DIGITS, 0x02, seconds);	
+	for (;;){
+		time = localtime(&_t);
+	 
+	    hourMinutes = concatenateInt(tm_struct->tm_hour, tm_struct->tm_min)
+		seconds = tm_struct->tm_sec;
+
+		strftime(dateTime,100,"%d/%m/%Y %H:%M:%S", time);
+		printf ("%s\n", dateTime);
+		timeString = dateTime;
+
+		genieWriteObj(GENIE_OBJ_LED_DIGITS, 0x01, hourMinutes);	
+		genieWriteObj(GENIE_OBJ_LED_DIGITS, 0x02, seconds);	
+
+	} 
+ 
   return NULL;
 }
-
-
-
 
 //This is the event handler. Messages received from the display
 //are processed here.
@@ -143,34 +154,12 @@ unsigned concatenateInt(unsigned x, unsigned y) {
 }
 
 /**
- * Imprime la fecha y hora del sistema
- */
-void imprimirDateTime(pthread_t *myThread)
-{
-	string hourMinutes;
-	t = time(NULL);	
-	time = localtime(&_t);
- 
-    hourMinutes = concatenateInt(tm_struct->tm_hour, tm_struct->tm_min)
-	seconds = tm_struct->tm_sec;
-
-	strftime(dateTime,100,"%d/%m/%Y %H:%M:%S", time);
-	printf ("%s\n", dateTime);
-	timeString = dateTime;
-
-	//start the thread to write hour and seconds to led digits
-	(void)pthread_create (myThread,  NULL, handleHour, NULL); 
-
-}
-
-/**
  * Evalua el valor de la Temperatura y actualiza el estado del LED 
  */
-void procesarTemperatura(int temperatureC, pthread_t *myThread)
+void procesarTemperatura(int temperatureC)
 {
 	if( temperatureC >= tempMedia)
 	{ //start the thread for writing to the USER_LED	
-		(void)pthread_create (myThread,  NULL, handleThreshold, NULL); 
 		digitalWrite(LRED,HIGH);
   	}
 	else digitalWrite(LRED,LOW);
@@ -202,9 +191,8 @@ int main(int argc, char **argv)
 	pthread_t myThread;              //declare a thread
   	struct genieReplyStruct reply ;  //declare a genieReplyStruct type structure
 
-  	//open the Raspberry Pi's onboard serial port, baud rate is 115200
-    //make sure that the display module has the same baud rate
-  	genieSetup("/dev/serial0", 115200);  
+  	//open the Raspberry Pi's onboard serial port with the baudrate
+  	genieSetup("/dev/serial0", BAUDURATE);  
 
 	init();
 
@@ -222,6 +210,12 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
+	
+	//start the thread to write hour and seconds to led digits
+	(void)pthread_create (myThread,  NULL, handleHour, NULL);
+	//start the thread for writing to the METER, USER_LED and ANGULAR_METER	
+  	(void)pthread_create (myThread,  NULL, handleHumidityTemperature, NULL);
+	
 	for(;;)
 	{
 		// Initiate measurement by sending a zero bit (see datasheet for communication pattern)
@@ -233,9 +227,6 @@ int main(int argc, char **argv)
 
 		//Wait for 100ms for measurement to complete. Typical measurement cycle is 36.65ms for each of humidity and temperature, so you may reduce this to 74ms.
 		usleep(100000);
-		
-		imprimirDateTime(&myThread);
-		
 		
 		// read back data
 		if (read(fileDescriptor, buffer, 4) < 0)
@@ -265,13 +256,8 @@ int main(int argc, char **argv)
 
 				genieWriteStr(0x00, tempAux + "\n" + humAux);
 				
-				procesarTemperatura((int)temperature, &myThread);
+				procesarTemperatura((int)temperature);
 				procesarHumedad((int)humidity);
-
-
-
-				//start the thread for writing to the METER and ANGULAR_METER	
-  				(void)pthread_create (&myThread,  NULL, handleHumidityTemperature, NULL);
 				
 
 				 while(genieReplyAvail())      //check if a message is available
