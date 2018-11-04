@@ -1,9 +1,9 @@
 /**
- * Links: 
+ * Links:
  *      https://github.com/karlrupp/i2cHoneywellHumidity/blob/master/i2cHoneywellHumidity.c
  *      https://poesiabinaria.net/2012/06/obtener-la-fecha-y-hora-formateada-en-c/
  *      http://rants.dyer.com.hk/rpi/humidity_i2c.html
- *		
+ *
  * Conexion del Sensor HIH al Raspberry Pi
  *   SENSOR       RASPBERRY
  * VDD(1)    -->    3V3 (NumPin: 17)
@@ -17,7 +17,7 @@
  * Ejecutar: sudo ./<nombre>
  *
  */
- 
+
  //Sensores
 #include <stdio.h>
 #include <stdlib.h>
@@ -57,57 +57,55 @@ const char *fileNamePort = "/dev/i2c-1"; // Name of the port we will be using. O
 int  address = 0x27; // Address of Honeywell sensor shifted right 1 bit
 unsigned char buffer[4]; // Buffer for data read/written on the i2c bus
 time_t t;
-struct tm *time;
-int hourMinutes;
-int seconds;
+struct tm *tm;
 char dateTime[100];
-int tempMedia = 27;
+int timeConcatenated;
+int tempThreshold = 27;
 
 
 int reading_temp;
 int reading_hum;
 double temperature;
 double humidity;
+char tempAux[100];
+char humAux[100];
 
+
+//Concatena dos enteros
+int concatenate(int x, int y){
+    int pow = 10;
+
+    while (y >= pow) pow *= 10;
+    return x * pow + y;
+
+}
 
 
 //This a thread for writing to the METER(hum) and ANGULAR_METER(temp).
 static void *handleHumidityTemperature(void *data)
 {
 
-    //write to METER
-    genieWriteObj(GENIE_OBJ_METER, 0x00, (int)humidity);	
-    genieWriteObj(GENIE_OBJ_ANGULAR_METER, 0x00, (int)temperature);	
-    if((int)temperature = tempMedia){
-    	 genieWriteObj(GENIE_OBJ_USER_LED, 0x00, (int)tempMedia);	
+    for(;;){
+
+        t = time(NULL);
+        tm = localtime(&t);
+
+	    /*strftime(dateTime,100,"%d/%m/%Y %H:%M:%S", tm);
+		printf ("%s\n", dateTime);*/
+
+		timeConcatenated = concatenate(tm->tm_hour, tm->tm_min);
+		genieWriteObj(GENIE_OBJ_LED_DIGITS, 0x01, timeConcatenated);
+		genieWriteObj(GENIE_OBJ_LED_DIGITS, 0x02, tm->tm_sec);
+
+        //write to METER
+        genieWriteObj(GENIE_OBJ_METER, 0x00, (int)humidity);
+        genieWriteObj(GENIE_OBJ_ANGULAR_METER, 0x00, (int)temperature);
+        if((int)temperature >= tempThreshold){
+             genieWriteObj(GENIE_OBJ_USER_LED, 0x00, 1);
+        }else{
+        genieWriteObj(GENIE_OBJ_USER_LED, 0x00, 0);
+        }
     }
-  return NULL;
-}
-
-
-//This a thread for writing to the LED_DIGITS
-static void *handleHour(void *data)
-{
-
-  //write to LED_DIGITS
-	string hourMinutes;
-	t = time(NULL);	
-
-	for (;;){
-		time = localtime(&_t);
-	 
-	    hourMinutes = concatenateInt(tm_struct->tm_hour, tm_struct->tm_min)
-		seconds = tm_struct->tm_sec;
-
-		strftime(dateTime,100,"%d/%m/%Y %H:%M:%S", time);
-		printf ("%s\n", dateTime);
-		timeString = dateTime;
-
-		genieWriteObj(GENIE_OBJ_LED_DIGITS, 0x01, hourMinutes);	
-		genieWriteObj(GENIE_OBJ_LED_DIGITS, 0x02, seconds);	
-
-	} 
- 
   return NULL;
 }
 
@@ -121,10 +119,10 @@ void handleTempThresholdEvent(struct genieReplyStruct * reply)
       {
         if(reply->index == 0)		  //check if the index byte is that of KNOB
 
-        	tempMedia = (int)reply->data		
+        	tempThreshold = (int)reply->data;
       }
   }
-  
+
   //if the received message is not a report event, print a message on the terminal window
   else
     printf("Unhandled event: command: %2d, object: %2d, index: %d, data: %d \r\n", reply->cmd, reply->object, reply->index, reply->data);
@@ -136,30 +134,20 @@ void handleTempThresholdEvent(struct genieReplyStruct * reply)
 void init()
 {
 	wiringPiSetup();
-	
+
 	pinMode(LRED, OUTPUT);
 	pinMode(RGBGREEN, OUTPUT);
 	pinMode(RGBBLUE, OUTPUT);
 	pinMode(RGBRED, OUTPUT);
 }
 
-/*
-* Concatena dos int
-*/
-unsigned concatenateInt(unsigned x, unsigned y) {
-    unsigned pow = 10;
-    while(y >= pow)
-        pow *= 10;
-    return x * pow + y;        
-}
-
 /**
- * Evalua el valor de la Temperatura y actualiza el estado del LED 
+ * Evalua el valor de la Temperatura y actualiza el estado del LED
  */
 void procesarTemperatura(int temperatureC)
 {
-	if( temperatureC >= tempMedia)
-	{ //start the thread for writing to the USER_LED	
+	if( temperatureC >= tempThreshold)
+	{ //start the thread for writing to the USER_LED
 		digitalWrite(LRED,HIGH);
   	}
 	else digitalWrite(LRED,LOW);
@@ -170,12 +158,12 @@ void procesarTemperatura(int temperatureC)
  */
 void procesarHumedad(int humidityC)
 {
-	if( humidityC < RMINHUM ) // RED ON
+	if( humidityC < HUMMIN ) // RED ON
 	{
 		digitalWrite(RGBRED,HIGH);
 		digitalWrite(RGBGREEN,LOW);
 		digitalWrite(RGBBLUE,LOW);
-	}else if( humidityC >= RMINHUM && humidityC <= RMAXHUM ){ // GREEN ON
+	}else if( humidityC >= HUMMIN && humidityC <= HUMMAX ){ // GREEN ON
 		digitalWrite(RGBGREEN,HIGH);
 		digitalWrite(RGBRED,LOW);
 		digitalWrite(RGBBLUE,LOW);
@@ -186,13 +174,15 @@ void procesarHumedad(int humidityC)
 	}
 }
 
+
+
 int main(int argc, char **argv)
-{	
+{
 	pthread_t myThread;              //declare a thread
   	struct genieReplyStruct reply ;  //declare a genieReplyStruct type structure
 
   	//open the Raspberry Pi's onboard serial port with the baudrate
-  	genieSetup("/dev/serial0", BAUDURATE);  
+  	genieSetup("/dev/serial0", BAUDURATE);
 
 	init();
 
@@ -210,12 +200,9 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	
-	//start the thread to write hour and seconds to led digits
-	(void)pthread_create (myThread,  NULL, handleHour, NULL);
-	//start the thread for writing to the METER, USER_LED and ANGULAR_METER	
-  	(void)pthread_create (myThread,  NULL, handleHumidityTemperature, NULL);
-	
+	//start the thread for writing to the METER, USER_LED and ANGULAR_METER
+  	(void)pthread_create (&myThread,  NULL, handleHumidityTemperature, NULL);
+
 	for(;;)
 	{
 		// Initiate measurement by sending a zero bit (see datasheet for communication pattern)
@@ -227,7 +214,7 @@ int main(int argc, char **argv)
 
 		//Wait for 100ms for measurement to complete. Typical measurement cycle is 36.65ms for each of humidity and temperature, so you may reduce this to 74ms.
 		usleep(100000);
-		
+
 		// read back data
 		if (read(fileDescriptor, buffer, 4) < 0)
 		{
@@ -237,38 +224,33 @@ int main(int argc, char **argv)
 		else
 		{
 			if((buffer[0] & 0xC0) == 0) // Verify state sensor is 0 making AND with 11000000
-			{	
+			{
 				// Humidity is located in first two bytes
 				reading_hum = (buffer[0] << 8) + buffer[1];
 				humidity =reading_hum / 16382.0 * 100.0;
-				
+
 				// Temperature is located in next two bytes, padded by two trailing bits
 				reading_temp = (buffer[2] << 6) + (buffer[3] >> 2);
 				temperature = reading_temp / 16382.0 * 165.0 - 40;
-				
 
+                sprintf(tempAux,  "Temperatura%s: %.1f\n", temperature);
+                sprintf(humAux, "Humedad%s: %.1f\n\n", humidity);
 
-			    string tempAux = "Temperatura%s: %.1f\n", "(C)", temperature;
-			    string humAux = "Humedad%s: %.1f\n\n", "(%)", humidity
+				genieWriteStr(0x00, strcat(tempAux, humAux));
 
-				printf(tempAux);
-				printf(humAux);
-
-				genieWriteStr(0x00, tempAux + "\n" + humAux);
-				
 				procesarTemperatura((int)temperature);
 				procesarHumedad((int)humidity);
-				
 
-				 while(genieReplyAvail())      //check if a message is available
+
+                while(genieReplyAvail())      //check if a message is available
 			    {
 			      genieGetReply(&reply);      //take out a message from the events buffer
 			      handleTempThresholdEvent(&reply);   //call the event handler to process the message
-			    }	
-			}else 
+			    }
+			}else
 				printf("Error, el Estado es != 0\n");
 		}
-		delay(3000);
+		//delay(3000);
 	}
 
 	return 0;
