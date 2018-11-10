@@ -1,21 +1,13 @@
 /**
- * Links:
- *      https://github.com/karlrupp/i2cHoneywellHumidity/blob/master/i2cHoneywellHumidity.c
- *      https://poesiabinaria.net/2012/06/obtener-la-fecha-y-hora-formateada-en-c/
- *      http://rants.dyer.com.hk/rpi/humidity_i2c.html
  *
  * Recordatorio
- *   SENSOR       RASPBERRY
+ * SENSOR           RASPBERRY
  * VDD(1)    -->    3V3 (NumPin: 17)
  * VSS(2)    -->    GND (NumPin: 9)
  * SCL(3)    -->    GPIO3 (NumPin: 5)
  * SDA(4)    -->	GPIO2 (NumPin: 3)
  *
  * BAUDIOS   -->    115200
- *
- * Compilar: make
- * Limpiar: make clean
- * Ejecutar: sudo ./<nombre>
  *
  */
 
@@ -57,14 +49,18 @@ int fileDescriptor; // File descriptor
 const char *fileNamePort = "/dev/i2c-1"; // Name of the port we will be using. On Raspberry 2 this is i2c-1, on an older Raspberry Pi 1 this might be i2c-0.
 int  address = 0x27; // Address of Honeywell sensor shifted right 1 bit
 unsigned char buffer[4]; // Buffer for data read/written on the i2c bus
+
+//Time
 time_t t;
 struct tm *tm;
 char dateTime;
-char geineData;
 int timeConcatenated;
+
+//Genie
+char geineData;
+
+//Temp and Hum
 int tempThreshold = 27;
-
-
 int reading_temp;
 int reading_hum;
 double temperature;
@@ -81,25 +77,25 @@ int concatenate(int x, int y){
 }
 
 
-//This a thread for writing to the METER(hum) and ANGULAR_METER(temp).
+//This a thread for writing to the METER(hum) and ANGULAR_METER(temp)
 static void *handleHumidityTemperature(void *data)
 {
 
+	//write to METER, ANGULAR_METER and USER_LED
     for(;;){
-        //write to METER, ANGULAR_METER and USER_LED
+        
         genieWriteObj(GENIE_OBJ_METER, 0x00, (int)humidity);
         genieWriteObj(GENIE_OBJ_ANGULAR_METER, 0x00, (int)temperature);
         if((int)temperature >= tempThreshold){
              genieWriteObj(GENIE_OBJ_USER_LED, 0x00, 1);
         }else{
-        genieWriteObj(GENIE_OBJ_USER_LED, 0x00, 0);
+        	genieWriteObj(GENIE_OBJ_USER_LED, 0x00, 0);
         }
     }
   return NULL;
 }
 
-//This is the event handler. Messages received from the display
-//are processed here.
+//This is the event handler. Messages received from the display are processed here.
 void handleTempThresholdEvent(struct genieReplyStruct * reply)
 {
   if(reply->cmd == GENIE_REPORT_EVENT)    //check if the cmd byte is a report event
@@ -114,11 +110,11 @@ void handleTempThresholdEvent(struct genieReplyStruct * reply)
 
   //if the received message is not a report event, print a message on the terminal window
   else
-    printf("Unhandled event: command: %2d, object: %2d, index: %d, data: %d \r\n", reply->cmd, reply->object, reply->index, reply->data);
+    printf("Evento no manejado: command: %2d, object: %2d, index: %d, data: %d \r\n", reply->cmd, reply->object, reply->index, reply->data);
 }
 
-
-void init()
+//Inicializa la salida de los leds y escribe en el LED_DIGITS y en el KNOB
+void inicializarComponentes()
 {
 	wiringPiSetup();
 
@@ -131,6 +127,7 @@ void init()
 	genieWriteObj(GENIE_OBJ_KNOB, 0x00, tempThreshold); 
 }
 
+//Muestra el tiempo por consola y por los LED_DIGITS
 void procesarTiempo(){
 		t = time(NULL);
         tm = localtime(&t);
@@ -143,7 +140,7 @@ void procesarTiempo(){
 		genieWriteObj(GENIE_OBJ_LED_DIGITS, 0x02, tm->tm_sec);
 }
 
-//Evalua el valor de la Temperatura y actualiza el estado del LED
+//Evalua el valor de la Temperatura y actualiza el estado del USER_LED y del ANGULAR_METER
 void procesarTemperatura(int temperatureC)
 {
 
@@ -159,7 +156,7 @@ void procesarTemperatura(int temperatureC)
   	} 
 }
 
-//Evalua el valor de la Humedad y actualiza el estado del actuador RGB
+//Evalua el valor de la Humedad y actualiza el estado del actuador RGB y del METER
 void procesarHumedad(int humidityC)
 {
 
@@ -185,13 +182,13 @@ void procesarHumedad(int humidityC)
 
 int main(int argc, char **argv)
 {
-	pthread_t myThread;              //declare a thread
-  	struct genieReplyStruct reply ;  //declare a genieReplyStruct type structure
+	pthread_t myThread;              //Declare a thread
+  	struct genieReplyStruct reply ;  //Declare a genieReplyStruct type structure
 
   	//open the Raspberry Pi's onboard serial port with the baudrate
   	genieSetup("/dev/serial0", BAUDURATE);
 
-	init();
+	inicializarComponentes();
 
 	// Open port (r/w)
 	if ((fileDescriptor = open(fileNamePort, O_RDWR)) < 0)
@@ -203,7 +200,7 @@ int main(int argc, char **argv)
 	// Set port options and slave devie address
 	if (ioctl(fileDescriptor, I2C_SLAVE, address) < 0)
 	{
-		printf("Unable to get bus access to talk to slave\n");
+		printf("El bus no tiene acceso para hablar con el esclavo\n");
 		exit(1);
 	}
 
@@ -215,7 +212,7 @@ int main(int argc, char **argv)
 		// Initiate measurement by sending a zero bit (see datasheet for communication pattern)
 		if ( (write(fileDescriptor,buffer,0)) != 0 )
 		{
-			printf("Error writing bit to i2c slave\n");
+			printf("Error escribiendo el bit al esclavo i2c\n");
 			exit(1);
 		}
 
@@ -228,7 +225,7 @@ int main(int argc, char **argv)
 		// read back data
 		if (read(fileDescriptor, buffer, 4) < 0)
 		{
-			printf("No se puede leer los datos del esclavo\n");
+			printf("No se pueden leer los datos del esclavo\n");
 			exit(1);
 		}
 		else
@@ -243,7 +240,7 @@ int main(int argc, char **argv)
 				reading_temp = (buffer[2] << 6) + (buffer[3] >> 2);
 				temperature = reading_temp / 16382.0 * 165.0 - 40;
 
-				sprintf(genieData, "Temperature (ºC): %.1f\nHumidity (%): %.1f", temperature, humidity);
+				sprintf(genieData, "Temperatura (ºC): %.1f\nHumedad (%): %.1f", temperature, humidity);
 
                 printf("Temperatura%s: %.1f\n", temperature);
                 printf("Humedad%s: %.1f\n\n", humidity);
@@ -260,7 +257,7 @@ int main(int argc, char **argv)
 			      handleTempThresholdEvent(&reply);   //call the event handler to process the message
 			    }
 			}else
-				printf("Error, el Estado es != 0\n");
+				printf("Error, el estado es != 0\n");
 		}
 	}
 
