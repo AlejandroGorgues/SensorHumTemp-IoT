@@ -4,7 +4,7 @@
  *      https://poesiabinaria.net/2012/06/obtener-la-fecha-y-hora-formateada-en-c/
  *      http://rants.dyer.com.hk/rpi/humidity_i2c.html
  *
- * Conexion del Sensor HIH al Raspberry Pi
+ * Recordatorio
  *   SENSOR       RASPBERRY
  * VDD(1)    -->    3V3 (NumPin: 17)
  * VSS(2)    -->    GND (NumPin: 9)
@@ -86,18 +86,7 @@ static void *handleHumidityTemperature(void *data)
 {
 
     for(;;){
-
-        t = time(NULL);
-        tm = localtime(&t);
-
-	    /*strftime(dateTime,100,"%d/%m/%Y %H:%M:%S", tm);
-		printf ("%s\n", dateTime);*/
-
-		timeConcatenated = concatenate(tm->tm_hour, tm->tm_min);
-		genieWriteObj(GENIE_OBJ_LED_DIGITS, 0x01, timeConcatenated);
-		genieWriteObj(GENIE_OBJ_LED_DIGITS, 0x02, tm->tm_sec);
-
-        //write to METER
+        //write to METER, ANGULAR_METER and USER_LED
         genieWriteObj(GENIE_OBJ_METER, 0x00, (int)humidity);
         genieWriteObj(GENIE_OBJ_ANGULAR_METER, 0x00, (int)temperature);
         if((int)temperature >= tempThreshold){
@@ -128,9 +117,7 @@ void handleTempThresholdEvent(struct genieReplyStruct * reply)
     printf("Unhandled event: command: %2d, object: %2d, index: %d, data: %d \r\n", reply->cmd, reply->object, reply->index, reply->data);
 }
 
-/**
- * Define el estado de los PINs como salida.
- */
+
 void init()
 {
 	wiringPiSetup();
@@ -144,23 +131,40 @@ void init()
 	genieWriteObj(GENIE_OBJ_KNOB, 0x00, tempThreshold); 
 }
 
-/**
- * Evalua el valor de la Temperatura y actualiza el estado del LED
- */
+void procesarTiempo(){
+		t = time(NULL);
+        tm = localtime(&t);
+
+	    strftime(dateTime,100,"%d/%m/%Y %H:%M:%S", tm);
+		printf ("%s\n", dateTime);
+
+		timeConcatenated = concatenate(tm->tm_hour, tm->tm_min);
+		genieWriteObj(GENIE_OBJ_LED_DIGITS, 0x01, timeConcatenated);
+		genieWriteObj(GENIE_OBJ_LED_DIGITS, 0x02, tm->tm_sec);
+}
+
+//Evalua el valor de la Temperatura y actualiza el estado del LED
 void procesarTemperatura(int temperatureC)
 {
+
+	genieWriteObj(GENIE_OBJ_ANGULAR_METER, 0x00, (int)temperature);
+
 	if( temperatureC >= tempThreshold)
 	{ //start the thread for writing to the USER_LED
 		digitalWrite(LRED,HIGH);
-  	}
-	else digitalWrite(LRED,LOW);
+		genieWriteObj(GENIE_OBJ_USER_LED, 0x00, 1);
+  	}else{
+  		digitalWrite(LRED,LOW);
+		genieWriteObj(GENIE_OBJ_USER_LED, 0x00, 0);
+  	} 
 }
 
-/**
- * Evalua el valor de la Humedad y actualiza el estado del actuador RGB
- */
+//Evalua el valor de la Humedad y actualiza el estado del actuador RGB
 void procesarHumedad(int humidityC)
 {
+
+	genieWriteObj(GENIE_OBJ_METER, 0x00, (int)humidity);
+
 	if( humidityC < HUMMIN ) // RED ON
 	{
 		digitalWrite(RGBRED,HIGH);
@@ -215,6 +219,9 @@ int main(int argc, char **argv)
 			exit(1);
 		}
 
+		//Show the current time
+		procesarTiempo()
+
 		//Wait for 100ms for measurement to complete. Typical measurement cycle is 36.65ms for each of humidity and temperature, so you may reduce this to 74ms.
 		usleep(100000);
 
@@ -236,12 +243,12 @@ int main(int argc, char **argv)
 				reading_temp = (buffer[2] << 6) + (buffer[3] >> 2);
 				temperature = reading_temp / 16382.0 * 165.0 - 40;
 
-				sprintf(genieData, "Temperature (ºC): %.1f\nHumidity (%): %.1f", "(C)",temperature,"(%)",humidity); // Actualizamos el valor con el formato respectivo
+				sprintf(genieData, "Temperature (ºC): %.1f\nHumidity (%): %.1f", temperature, humidity);
 
                 printf("Temperatura%s: %.1f\n", temperature);
                 printf("Humedad%s: %.1f\n\n", humidity);
 
-				genieWriteStr(0x00, genieData);
+				genieWriteStr(0x00, genieData);//Write temp and hum to the screen
 
 				procesarTemperatura((int)temperature);
 				procesarHumedad((int)humidity);
