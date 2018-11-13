@@ -1,0 +1,22 @@
+/**
+ *
+ * Recordatorio
+ * SENSOR           RASPBERRY
+ * VDD(1)    -->    3V3 (NumPin: 17)
+ * VSS(2)    -->    GND (NumPin: 9)
+ * SCL(3)    -->    GPIO3 (NumPin: 5)
+ * SDA(4)    -->	GPIO2 (NumPin: 3)
+ *
+ * BAUDIOS   -->    115200
+ *
+ *
+ * #define RGBBLUE 5 // GPIO24 (NumPin: 18)
+ * #define RGBGREEN 4 // GPIO23 (NumPin: 16)
+ * #define RGBRED 6 // GPIO25 (NumPin: 22)
+ * #define LRED 1 // GPIO18 (NumPin: 12)
+ *
+ * #define HUMMAX 70.0
+ * #define HUMMIN 40.0
+ * #define BAUDRATE 115200 // Must be the same as the program
+ *
+ */
