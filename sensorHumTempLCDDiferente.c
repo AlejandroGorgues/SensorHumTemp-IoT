@@ -21,9 +21,9 @@
 #include <errno.h>
 #include <unistd.h>
 
-#include <geniePi.h>  
+#include <geniePi.h>
 
-int fileDescriptor; 
+int fileDescriptor;
 const char *fileNamePort = "/dev/i2c-1"; // Nombre del puerto que usaremos. En rapsberri 3 puede ser 0 o 1, aunque es normalmente 1
 int  address = 0x27; // Dirección donde se conectará el sensor
 unsigned char buffer[4]; // Buffer para escribir y obtener los datos del sensor a partir del bus i2c
@@ -31,11 +31,11 @@ unsigned char buffer[4]; // Buffer para escribir y obtener los datos del sensor 
 //Time
 time_t t;
 struct tm *tm;
-char dateTime;
+char dateTime[100];
 int timeConcatenated;
 
 //Genie
-char geineData;
+char genieData[100] = {};
 
 //Temp y Hum
 double temperature;
@@ -62,7 +62,7 @@ static void *handleHumidityTemperature(void *data)
 
 	//Escribe al METER, ANGULAR_METER y al USER_LED
     for(;;){
-        
+
         genieWriteObj(GENIE_OBJ_METER, 0x00, (int)humidity);
         genieWriteObj(GENIE_OBJ_ANGULAR_METER, 0x00, (int)temperature);
         if((int)temperature >= tempThreshold){
@@ -77,7 +77,7 @@ static void *handleHumidityTemperature(void *data)
 //Se maneja el evento. Los mensajes recibidos del display se manejan aqui.
 void handleTempThresholdEvent(struct genieReplyStruct * reply)
 {
-  if(reply->cmd == GENIE_REPORT_EVENT)    //Comprueba si el byte de cmd es de tipo report event 
+  if(reply->cmd == GENIE_REPORT_EVENT)    //Comprueba si el byte de cmd es de tipo report event
   {
     if(reply->object == GENIE_OBJ_KNOB) //Comprueba si el byte de object es del knob
       {
@@ -102,15 +102,13 @@ void inicializarPines()
 	pinMode(5, OUTPUT);
 	pinMode(6, OUTPUT);
 
-	genieWriteObj(GENIE_OBJ_LED_DIGITS, 0x00, tempThreshold); 
-	genieWriteObj(GENIE_OBJ_KNOB, 0x00, tempThreshold); 
 }
 
 void procesarTiempo(){
 		t = time(NULL);
-        tm = localtime(&t);
+        	tm = localtime(&t);
 
-	    strftime(dateTime,100,"%d/%m/%Y %H:%M:%S", tm);
+        strftime(dateTime,100,"%d/%m/%Y %H:%M:%S", tm);
 		printf ("%s\n", dateTime);
 
 		timeConcatenated = concatenate(tm->tm_hour, tm->tm_min);
@@ -121,34 +119,30 @@ void procesarTiempo(){
 void procesarTemperatura(int temperatureC)
 {
 
-	genieWriteObj(GENIE_OBJ_ANGULAR_METER, 0x00, (int)temperature);
-
 	if( temperatureC >= tempThreshold)
-	{ 
+	{
 		digitalWrite(1,HIGH);
 		genieWriteObj(GENIE_OBJ_USER_LED, 0x00, 1);
   	}else{
   		digitalWrite(1,LOW);
 		genieWriteObj(GENIE_OBJ_USER_LED, 0x00, 0);
-  	} 
+  	}
 }
 
 
 void procesarHumedad(int humidityC)
 {
 
-	genieWriteObj(GENIE_OBJ_METER, 0x00, (int)humidity);
-
-	if( humidityC < 40.0 ) 
+	if( humidityC < 40.0 )
 	{
 		digitalWrite(6,HIGH);
 		digitalWrite(4,LOW);
 		digitalWrite(5,LOW);
-	}else if( humidityC >= 40.0 && humidityC <= 70.0 ){ 
+	}else if( humidityC >= 40.0 && humidityC <= 70.0 ){
 		digitalWrite(4,HIGH);
 		digitalWrite(6,LOW);
 		digitalWrite(5,LOW);
-	}else{ 
+	}else{
 		digitalWrite(5,HIGH);
 		digitalWrite(6,LOW);
 		digitalWrite(4,LOW);
@@ -194,7 +188,7 @@ int main(int argc, char **argv)
 		}
 
 		//Muestra el tiempo actual
-		procesarTiempo()
+		procesarTiempo();
 
 		// Espera durante 100ms para completar la medida.El tiempo de espera medio para el de temperatura y humedad es de 36.65ms, es decir, que en total seería alrededor de 74ms.
 		usleep(100000);
@@ -217,10 +211,10 @@ int main(int argc, char **argv)
 				reading_temp = (buffer[2] << 6) + (buffer[3] >> 2);
 				temperature = reading_temp / 16382.0 * 165.0 - 40;
 
-				sprintf(genieData, "Temperatura (ºC): %.1f\nHumedad (%): %.1f", temperature, humidity);
+				sprintf(genieData, "Temperatura (ºC): %.1f\nHumedad (%%): %.1f", temperature, humidity);
 
-                printf("Temperatura%s: %.1f\n", temperature);
-                printf("Humedad%s: %.1f\n\n", humidity);
+                printf("Temperatura: %.1f\n", temperature);
+                printf("Humedad: %.1f\n\n", humidity);
 
 				genieWriteStr(0x00, genieData);//Escribe la humedad y la temperatura al display
 
